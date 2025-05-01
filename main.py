@@ -5,11 +5,6 @@ from dotenv import load_dotenv
 import os
 import logfire
 
-# Load environment variables from .env
-load_dotenv()
-openai_api_key = os.getenv("OPENAI_API_KEY")
-llm_model = os.getenv("LLM_MODEL", "openai:gpt-4o")
-
 # Optionally configure logfire
 logfire.configure(send_to_logfire='if-token-present')
 
@@ -25,10 +20,11 @@ async def main():
     ]
 
     print("Welcome to the Real Estate Agent Chat!")
-    message = "Hello! I'm here to help you find your dream home. Let's start by gathering some information. What is your name?"
+    message = ""
 
     # Chat loop
     while True:
+
         # Create a summary of the current UserProfile
         profile_summary = f"""
         Current User Profile:
@@ -45,7 +41,6 @@ async def main():
         # Augment the message with the profile summary
         augmented_message = message + "\n" + profile_summary
 
-        print(augmented_message)    
         response = await agent.run(augmented_message, deps=user_profile)
         print(f"Agent: {response.output}")
 

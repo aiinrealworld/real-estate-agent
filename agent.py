@@ -1,4 +1,6 @@
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from models import UserProfile
 
 from dotenv import load_dotenv
@@ -6,13 +8,34 @@ import os
 from typing import Optional, List
 
 load_dotenv()
-openai_api_key = os.getenv("OPENAI_API_KEY")
-llm_model = os.getenv("LLM_MODEL", "openai:gpt-4o")
-system_prompt = os.getenv("SYSTEM_PROMPT")
+
+openrouter_api_key = os.getenv("OPENROUTER_KEY")
+llm_model = os.getenv("LLM_MODEL")
+
+model = OpenAIModel(
+    llm_model,
+    provider=OpenAIProvider(
+        base_url='https://openrouter.ai/api/v1',
+        api_key=openrouter_api_key
+    )
+)
+
+system_prompt = """
+    You are a helpful real estate voice agent. Be polite and helpful. Respond naturally as a human real estate agent would.
+
+    Identify the missing information from the user profile summary and collect one missing information from the user at a time.
+
+    You MUST use the `update_profile` tool to save each new piece of information. 
+
+    Keep it friendly and conversational.\n\nOnce all fields are filled, respond to the user 
+
+    \"Thank you! I now have everything I need to find you the perfect properties.\"
+"""
 
 realtor_agent = Agent(
-    model = llm_model,
+    model = model,
     system_prompt = system_prompt,
+    temperature=0,
     deps_type=UserProfile,
     output_type=str,
     instrument=True
