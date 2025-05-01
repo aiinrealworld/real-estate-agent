@@ -1,37 +1,73 @@
 import asyncio
-from agent import RealEstateAgent
-from agent import UserProfile
+from agent import realtor_agent
+from models import UserProfile
 from dotenv import load_dotenv
 import os
+import logfire
 
+# Load environment variables from .env
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
-llm_model = os.getenv("LLM_MODEL")
+llm_model = os.getenv("LLM_MODEL", "openai:gpt-4o")
+
+# Optionally configure logfire
+logfire.configure(send_to_logfire='if-token-present')
+
 
 async def main():
-    agent = RealEstateAgent(model=llm_model) 
-    print("Available tools:", list(agent._function_tools))
+    # Initialize agent and user profile
+    agent = realtor_agent
+    user_profile = UserProfile(name='Jerry')
 
-    user_profile = UserProfile()
-    profile_fields = ["name", "phone", "location", "property_type", "bedrooms", "bathrooms", "must_haves", "good_to_haves"]
+    profile_fields = [
+        "name", "phone", "location", "property_type", 
+        "bedrooms", "bathrooms", "must_haves", "good_to_haves"
+    ]
 
     print("Welcome to the Real Estate Agent Chat!")
-    message = "Hello! I'm here to help you find your dream home. Let's start by gathering some information. What is your name?" # Initial message
+    message = "Hello! I'm here to help you find your dream home. Let's start by gathering some information. What is your name?"
 
+    # Chat loop
     while True:
-        response = await agent.run(message, deps=user_profile) # Pass the user_profile as deps
-        print(response._output_tool_name) 
-        print(f"Agent: {response}")
+        # Create a summary of the current UserProfile
+        profile_summary = f"""
+        Current User Profile:
+        - Name: {user_profile.name}
+        - Phone: {user_profile.phone}
+        - Location: {user_profile.location}
+        - Property Type: {user_profile.property_type}
+        - Bedrooms: {user_profile.bedrooms}
+        - Bathrooms: {user_profile.bathrooms}
+        - Must-haves: {user_profile.must_haves}
+        - Good-to-haves: {user_profile.good_to_haves}
+        """
 
-        # Check if all profile fields are filled.
-        all_fields_filled = all(getattr(user_profile, field) is not None and getattr(user_profile, field) != []  for field in profile_fields[:6]) and len(user_profile.must_haves) > 0 and len(user_profile.good_to_haves) > 0
+        # Augment the message with the profile summary
+        augmented_message = message + "\n" + profile_summary
 
-        if all_fields_filled:
-            print("Great! I have all the information I need.")
-            print(f"Final User Profile: {user_profile}")  # Print the filled UserProfile
+        print(augmented_message)    
+        response = await agent.run(augmented_message, deps=user_profile)
+        print(f"Agent: {response.output}")
+
+        # Debug: Show profile state after each run
+        logfire.info("Updated profile", profile=user_profile.model_dump_json)
+        print(f"[DEBUG] Current Profile: {user_profile}\n")
+
+        # Check if all required fields are filled
+        basic_fields_filled = all(
+            getattr(user_profile, field) not in (None, "") for field in profile_fields[:6]
+        )
+        list_fields_filled = all(
+            len(getattr(user_profile, field)) > 0 for field in profile_fields[6:]
+        )
+
+        if basic_fields_filled and list_fields_filled:
+            print("\n✅ Great! I have all the information I need.")
+            print(f"\n🧾 Final User Profile:\n{user_profile}")
             break
 
-        message = input("User: ")
+        # Prompt next input
+        message = input("You: ")
 
 
 if __name__ == "__main__":
