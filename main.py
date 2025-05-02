@@ -15,7 +15,7 @@ async def main():
     user_profile = UserProfile(name='Jerry')
 
     profile_fields = [
-        "name", "phone", "location", "property_type", 
+        "name", "phone", "location", "property_type", "budget",
         "bedrooms", "bathrooms", "must_haves", "good_to_haves"
     ]
 
@@ -32,6 +32,7 @@ async def main():
         - Phone: {user_profile.phone}
         - Location: {user_profile.location}
         - Property Type: {user_profile.property_type}
+        - Budget: {user_profile.budget}
         - Bedrooms: {user_profile.bedrooms}
         - Bathrooms: {user_profile.bathrooms}
         - Must-haves: {user_profile.must_haves}
