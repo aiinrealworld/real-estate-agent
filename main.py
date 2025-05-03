@@ -42,7 +42,15 @@ async def main():
         # Augment the message with the profile summary
         augmented_message = message + "\n" + profile_summary
 
-        response = await agent.run(augmented_message, deps=user_profile)
+        message_history = ""
+
+        response = await agent.run(
+            augmented_message, 
+            deps=user_profile,
+            message_history=message_history)
+        
+        message_history = response.new_messages
+        
         print(f"Agent: {response.output}")
 
         # Debug: Show profile state after each run
@@ -51,16 +59,11 @@ async def main():
 
         # Check if all required fields are filled
         basic_fields_filled = all(
-            getattr(user_profile, field) not in (None, "") for field in profile_fields[:6]
+            getattr(user_profile, field) not in (None, "") for field in profile_fields[:7]
         )
         list_fields_filled = all(
-            len(getattr(user_profile, field)) > 0 for field in profile_fields[6:]
+            len(getattr(user_profile, field)) > 0 for field in profile_fields[7:]
         )
-
-        if basic_fields_filled and list_fields_filled:
-            print("\n✅ Great! I have all the information I need.")
-            print(f"\n🧾 Final User Profile:\n{user_profile}")
-            break
 
         # Prompt next input
         message = input("You: ")

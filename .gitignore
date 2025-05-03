@@ -172,3 +172,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Custom ignores
+TODO
+chroma_db
