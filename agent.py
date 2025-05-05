@@ -3,12 +3,14 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 import openai
 from models import UserProfile
+from models import normalize_user_profile
 import chromadb
 
 from dotenv import load_dotenv
 import os
 from typing import Optional, List
 from agent_config import SYSTEM_PROMPT
+
 
 load_dotenv()
 
@@ -88,12 +90,26 @@ async def when_new_user_profile_info_received(
 
 @realtor_agent.tool
 async def recommend_properties(ctx: RunContext[UserProfile]) -> dict:
-    query = profile_to_text(ctx.deps)
+    normalized_user_profile = normalize_user_profile(ctx.deps)
+    query = profile_to_text(normalized_user_profile)
     query_embedding = get_embedding(query)
+    
+    price_tolerance = 50000
+
     # Query Chroma
     results = collection.query(
         query_embeddings=[query_embedding],
-        n_results=3
+        n_results=3,
+        where = {
+            "$and": [
+                {"city": {"$eq": normalized_user_profile.location}},
+                {"price": {"$gte": int(normalized_user_profile.budget) - price_tolerance}},
+                {"price": {"$lte": int(normalized_user_profile.budget) + price_tolerance}},
+                {"bedrooms": {"$gte": int(normalized_user_profile.bedrooms)}},
+                {"bathrooms": {"$gte": int(normalized_user_profile.bathrooms)}}
+            ]
+        }
+
     )
     return results
 
