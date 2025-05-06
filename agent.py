@@ -1,13 +1,16 @@
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from openai import OpenAI
+import openai
 from models import UserProfile
+from models import normalize_user_profile
 import chromadb
 
 from dotenv import load_dotenv
 import os
 from typing import Optional, List
+from agent_config import SYSTEM_PROMPT
+
 
 load_dotenv()
 
@@ -24,39 +27,24 @@ model = OpenAIModel(
 
 # For embedding models
 openai_key = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=openai_key)
-
-system_prompt = """
-    You are a helpful real estate voice agent. Be polite and helpful. Respond naturally as a human real estate agent would.
-
-    Identify the missing information from the user profile summary and collect one missing information from the user at a time.
-
-    You MUST use the `update_profile` tool to save each new piece of information. Keep the coversation casual.
-
-    Once all fields are filled, recommend properties to the user matching their profile.
-
-    Keep it friendly and conversational.
-"""
 
 realtor_agent = Agent(
     model = model,
-    system_prompt = system_prompt,
-    temperature=0,
+    system_prompt = SYSTEM_PROMPT,
+    temperature=0.3,
     deps_type=UserProfile,
     output_type=str,
     instrument=True
 )
 
-# Load persistent Chroma client
-chroma_client = chromadb.PersistentClient(
-    path="./chroma_db"
-)
+from data.data_config import CHROMA_DB_LISTINGS, CHROMA_DB_PATH
 
-# Load the same collection
-collection = chroma_client.get_collection("properties")
+# Setup Chroma
+client = chromadb.PersistentClient(path="chroma_db")
+collection = client.get_collection(CHROMA_DB_LISTINGS)
 
 @realtor_agent.tool
-async def update_profile(
+async def when_new_user_profile_info_received(
     ctx: RunContext[UserProfile],
     name: Optional[str] = None,
     phone: Optional[str] = None,
@@ -69,7 +57,10 @@ async def update_profile(
     good_to_haves: Optional[List[str]] = None,
 ) -> str:
 
-    """Updates the user profile with the provided information."""
+    """
+        Updates the user profile with the provided information.
+        Agent should call this whenever a new piece of information is received from the user.
+    """
 
     profile = ctx.deps
     updated = False
@@ -99,12 +90,26 @@ async def update_profile(
 
 @realtor_agent.tool
 async def recommend_properties(ctx: RunContext[UserProfile]) -> dict:
-    query = profile_to_text(ctx.deps)
+    normalized_user_profile = normalize_user_profile(ctx.deps)
+    query = profile_to_text(normalized_user_profile)
     query_embedding = get_embedding(query)
+    
+    price_tolerance = 50000
+
     # Query Chroma
     results = collection.query(
         query_embeddings=[query_embedding],
-        n_results=3
+        n_results=3,
+        where = {
+            "$and": [
+                {"city": {"$eq": normalized_user_profile.location}},
+                {"price": {"$gte": int(normalized_user_profile.budget) - price_tolerance}},
+                {"price": {"$lte": int(normalized_user_profile.budget) + price_tolerance}},
+                {"bedrooms": {"$gte": int(normalized_user_profile.bedrooms)}},
+                {"bathrooms": {"$gte": int(normalized_user_profile.bathrooms)}}
+            ]
+        }
+
     )
     return results
 
@@ -121,8 +126,8 @@ def profile_to_text(profile: UserProfile) -> str:
 
 # Function to embed using OpenAI
 def get_embedding(text: str):
-    response = client.embeddings.create(
+    response = openai.embeddings.create(
         input=[text],
-        model="text-embedding-3-small"  # Choose your embedding model
+        model="text-embedding-3-small"
     )
     return response.data[0].embedding

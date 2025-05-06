@@ -2,8 +2,9 @@ import asyncio
 from agent import realtor_agent
 from models import UserProfile
 from dotenv import load_dotenv
-import os
 import logfire
+from typing import List
+from pydantic_ai.messages import ModelMessage
 
 # Optionally configure logfire
 logfire.configure(send_to_logfire='if-token-present')
@@ -12,7 +13,7 @@ logfire.configure(send_to_logfire='if-token-present')
 async def main():
     # Initialize agent and user profile
     agent = realtor_agent
-    user_profile = UserProfile(name='Jerry')
+    user_profile = UserProfile()
 
     profile_fields = [
         "name", "phone", "location", "property_type", "budget",
@@ -21,6 +22,8 @@ async def main():
 
     print("Welcome to the Real Estate Agent Chat!")
     message = ""
+
+    message_history: List[ModelMessage] = []
 
     # Chat loop
     while True:
@@ -42,19 +45,16 @@ async def main():
         # Augment the message with the profile summary
         augmented_message = message + "\n" + profile_summary
 
-        message_history = ""
-
         response = await agent.run(
             augmented_message, 
             deps=user_profile,
             message_history=message_history)
         
-        message_history = response.new_messages
+        message_history = response.all_messages()
         
         print(f"Agent: {response.output}")
 
         # Debug: Show profile state after each run
-        logfire.info("Updated profile", profile=user_profile.model_dump_json)
         print(f"[DEBUG] Current Profile: {user_profile}\n")
 
         # Check if all required fields are filled

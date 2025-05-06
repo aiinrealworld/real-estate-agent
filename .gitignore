@@ -176,3 +176,4 @@ cython_debug/
 # Custom ignores
 TODO
 chroma_db
+DEBUG
