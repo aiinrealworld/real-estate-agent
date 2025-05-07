@@ -9,6 +9,9 @@ from pydantic_ai.messages import ModelMessage
 
 from agent import realtor_agent
 from models import UserProfile
+import logfire
+
+logfire.configure(send_to_logfire='if-token-present')
 
 app = FastAPI()
 
@@ -36,7 +39,6 @@ class VAPIRequest(BaseModel):
 @app.post("/vapi-webhook/chat/completions")
 async def vapi_webhook(req: VAPIRequest):
     
-
     session_id = str(req.call.id)
     user_message = req.messages[-1].content
 
@@ -55,34 +57,17 @@ async def vapi_webhook(req: VAPIRequest):
     user_profile = session["profile"]
     message_history = session["message_history"]
 
-    # Build profile summary prompt
-    profile_summary = f"""
-    Current User Profile:
-    - Name: {user_profile.name}
-    - Phone: {user_profile.phone}
-    - Location: {user_profile.location}
-    - Property Type: {user_profile.property_type}
-    - Budget: {user_profile.budget}
-    - Bedrooms: {user_profile.bedrooms}
-    - Bathrooms: {user_profile.bathrooms}
-    - Must-haves: {user_profile.must_haves}
-    - Good-to-haves: {user_profile.good_to_haves}
-    """
-
-    # Combine message and context
-    augmented_message = user_message + "\n" + profile_summary
-
     # Run agent (non-streaming)
     response = await agent.run(
-        augmented_message,
+        user_message,
         deps=user_profile,
         message_history=message_history
     )
 
     print(f"Caller [{session_id}]: {user_message}")
     print(f"Agent [{session_id}]: {response.output}")
-
     session["message_history"] = response.all_messages()
+
     final_response = {
         "id": f"chatcmpl-{session_id}",
         "object": "chat.completion.chunk",
@@ -109,8 +94,6 @@ async def vapi_webhook(req: VAPIRequest):
             "Connection": "keep-alive",
         },
     )
-
-
 
 if __name__ == "__main__":
     uvicorn.run("voice_webhook:app", host="0.0.0.0", port=8000, reload=True)

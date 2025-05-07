@@ -6,17 +6,82 @@ import re
 class UserProfile(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
+    buyOrRent: Optional[str] = None
     location: Optional[str] = None
     property_type: Optional[str] = None
+    sqft: Optional[str] = None
     budget: Optional[str] = None
     bedrooms: Optional[int] = None
     bathrooms: Optional[float] = None
     must_haves: List[str] = []
     good_to_haves: List[str] = []
 
+def validate_user_profile(profile: UserProfile) -> List[str]:
+    errors = []
+
+    if not profile.name or not profile.name.strip():
+        errors.append("Name is required and cannot be empty.")
+
+    if not validate_phone_number(profile.phone):
+        errors.append("Phone number is required and must have 10 to 15 digits.")
+
+    if not profile.location or not profile.location.strip():
+        errors.append("Location is required and cannot be empty.")
+
+    if not profile.budget or not str(profile.budget).strip().isdigit():
+        errors.append("Budget is required and must be a numeric value.")
+
+    valid_property_types = {"Multi-Family", "Condo", "Single Family", "Townhouse"}
+    if not profile.property_type or profile.property_type.strip() not in valid_property_types:
+        errors.append(f"Property type must be one of: {', '.join(valid_property_types)}.")
+
+    valid_intents = {"buy", "rent"}
+    if not profile.buyOrRent or profile.buyOrRent.strip().lower() not in valid_intents:
+        errors.append("buyOrRent must be either 'buy' or 'rent'.")
+
+    return errors
+
+def validate_phone_number(phone: Optional[str]) -> bool:
+    if not phone:
+        return False
+    # Extract only digits
+    digits_only = "".join(re.findall(r"\d", phone))
+    # Check if the number has 10 to 15 digits
+    return 10 <= len(digits_only) <= 15
+
+def apply_defaults_to_profile(profile: UserProfile) -> UserProfile:
+    updated_profile = profile.model_copy()
+
+    if not updated_profile.sqft:
+        updated_profile.sqft = "2000"
+
+    if not updated_profile.property_type:
+        updated_profile.property_type = "Single Family"
+
+    if not updated_profile.buyOrRent:
+        updated_profile.buyOrRent = "buy"
+
+    if not updated_profile.bedrooms:
+        updated_profile.bedrooms = 3
+
+    if not updated_profile.bathrooms:
+        updated_profile.bathrooms = 2
+
+    if not updated_profile.budget:
+        if updated_profile.buyOrRent and updated_profile.buyOrRent.lower() == "buy":
+            updated_profile.budget = "300000"
+        elif updated_profile.buyOrRent and updated_profile.buyOrRent.lower() == "rent":
+            updated_profile.budget = "2000"
+
+    return updated_profile
+
 def normalize_user_profile(profile: UserProfile) -> UserProfile:
     return UserProfile(
-        property_type=profile.property_type.strip().lower(),
+        name=profile.name,
+        phone=profile.phone,
+        buyOrRent=profile.buyOrRent.strip().lower(),
+        property_type=profile.property_type.strip(),
+        sqft=str(normalize_sqft(profile.sqft)),
         bedrooms=str(normalize_bedrooms(profile.bedrooms)),
         bathrooms=str(normalize_bathrooms(profile.bathrooms)),
         budget=str(normalize_price(profile.budget)),

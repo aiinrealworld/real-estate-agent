@@ -2,8 +2,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 import openai
-from models import UserProfile
-from models import normalize_user_profile
+from models import UserProfile, validate_user_profile, normalize_user_profile, apply_defaults_to_profile
 import chromadb
 
 from dotenv import load_dotenv
@@ -15,7 +14,7 @@ from agent_config import SYSTEM_PROMPT
 load_dotenv()
 
 openrouter_api_key = os.getenv("OPENROUTER_KEY")
-llm_model = os.getenv("LLM_MODEL")
+llm_model = os.getenv("OPEN_ROUTER_LLM_MODEL")
 
 model = OpenAIModel(
     llm_model,
@@ -25,7 +24,8 @@ model = OpenAIModel(
     )
 )
 
-# For embedding models
+# Overriding to use OpenAI directly
+model = os.getenv("OPENAI_LLM_MODEL")
 openai_key = os.getenv("OPENAI_API_KEY")
 
 realtor_agent = Agent(
@@ -37,64 +37,58 @@ realtor_agent = Agent(
     instrument=True
 )
 
-from data.data_config import CHROMA_DB_LISTINGS, CHROMA_DB_PATH
+from data.data_config import CHROMA_DB_LISTINGS
 
 # Setup Chroma
 client = chromadb.PersistentClient(path="chroma_db")
 collection = client.get_collection(CHROMA_DB_LISTINGS)
 
 @realtor_agent.tool
-async def when_new_user_profile_info_received(
+async def recommend_properties(
     ctx: RunContext[UserProfile],
     name: Optional[str] = None,
     phone: Optional[str] = None,
+    buyOrRent: Optional[str] = None,
     location: Optional[str] = None,
     property_type: Optional[str] = None,
+    sqft: Optional[str] = None,
     budget: Optional[str] = None,
     bedrooms: Optional[int] = None,
     bathrooms: Optional[int] = None,
     must_haves: Optional[List[str]] = None,
-    good_to_haves: Optional[List[str]] = None,
-) -> str:
-
-    """
-        Updates the user profile with the provided information.
-        Agent should call this whenever a new piece of information is received from the user.
-    """
+    good_to_haves: Optional[List[str]] = None
+) -> dict:
 
     profile = ctx.deps
-    updated = False
 
-    def update_field(field_name, value):
-        nonlocal updated
-        if value:
-            setattr(profile, field_name, value)
-            updated = True
-
-    update_field("name", name)
-    update_field("phone", phone)
-    update_field("location", location)
-    update_field("property_type", property_type)
-    update_field("budget", budget)
-    update_field("bedrooms", bedrooms)
-    update_field("bathrooms", bathrooms)
+    setattr(profile, "name", name)
+    setattr(profile, "phone", phone)
+    setattr(profile, "buyOrRent", buyOrRent)
+    setattr(profile, "location", location)
+    setattr(profile, "property_type", property_type)
+    setattr(profile, "sqft", sqft)
+    setattr(profile, "budget", budget)
+    setattr(profile, "bedrooms", bedrooms)
+    setattr(profile, "bathrooms", bathrooms)
 
     if must_haves:
         profile.must_haves.extend(must_haves)
-        updated = True
     if good_to_haves:
         profile.good_to_haves.extend(good_to_haves)
-        updated = True
 
-    return "Profile updated." if updated else "No updates made."
+    validation_errors = validate_user_profile(profile)
+    if validation_errors:
+        return validation_errors
 
-@realtor_agent.tool
-async def recommend_properties(ctx: RunContext[UserProfile]) -> dict:
-    normalized_user_profile = normalize_user_profile(ctx.deps)
+    user_profile_with_defaults = apply_defaults_to_profile(profile)
+    normalized_user_profile = normalize_user_profile(user_profile_with_defaults)
+    print(f"normalized profile: {normalized_user_profile}")
+
     query = profile_to_text(normalized_user_profile)
     query_embedding = get_embedding(query)
     
     price_tolerance = 50000
+    sqft_tolerance = 300
 
     # Query Chroma
     results = collection.query(
@@ -103,6 +97,8 @@ async def recommend_properties(ctx: RunContext[UserProfile]) -> dict:
         where = {
             "$and": [
                 {"city": {"$eq": normalized_user_profile.location}},
+                {"property_type": {"$eq": normalized_user_profile.property_type}},
+                {"square_feet": {"$gte": int(normalized_user_profile.sqft) - sqft_tolerance}},
                 {"price": {"$gte": int(normalized_user_profile.budget) - price_tolerance}},
                 {"price": {"$lte": int(normalized_user_profile.budget) + price_tolerance}},
                 {"bedrooms": {"$gte": int(normalized_user_profile.bedrooms)}},
