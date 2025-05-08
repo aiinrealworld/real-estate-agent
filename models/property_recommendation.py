@@ -21,16 +21,6 @@ class PropertyRecommendation(BaseModel):
     longitude: float
     description: str
 
-    def __str__(self):
-        return (
-            f"{self.property_type} for sale in {self.neighborhood}, {self.city}, {self.state} "
-            f"({self.address}, ZIP {self.zip_code}).\n"
-            f"Price: ${self.price:,} | {self.bedrooms} beds, {self.bathrooms} baths | "
-            f"{self.square_feet:,} sq ft on a {self.lot_size} acre lot.\n"
-            f"Built in {self.year_built}. MLS Status: {self.mls_status}, on market for {self.days_on_market} days.\n"
-            f"{self.description.strip()[:300]}{'...' if len(self.description) > 300 else ''}"
-        )
-
 def parse_chroma_results(chroma_results: dict) -> List[PropertyRecommendation]:
     documents = chroma_results["documents"][0]
     metadatas = chroma_results["metadatas"][0]
@@ -61,6 +51,3 @@ def parse_chroma_results(chroma_results: dict) -> List[PropertyRecommendation]:
         recommendations.append(recommendation)
 
     return recommendations
-
-def format_recommendations_for_llm(recommendations: List[PropertyRecommendation]) -> str:
-    return "\n\n".join(str(r) for r in recommendations)

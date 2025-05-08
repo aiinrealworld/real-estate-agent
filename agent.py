@@ -3,7 +3,7 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 import openai
 from models.user_profile import UserProfile, validate_user_profile, normalize_user_profile, apply_defaults_to_profile
-from models.property_recommendation import PropertyRecommendation, parse_chroma_results, format_recommendations_for_llm
+from models.property_recommendation import PropertyRecommendation, parse_chroma_results
 import chromadb
 
 from dotenv import load_dotenv
@@ -108,11 +108,33 @@ async def recommend_properties(
         }
 
     )
-    print(f"recommended results {results}")
     recommendations = parse_chroma_results(results)
-    llm_input = format_recommendations_for_llm(recommendations)
+    print(f"recommended results {recommendations}")
+    return recommendations
 
-    return llm_input
+
+@realtor_agent.tool
+async def get_available_slots(
+        ctx: RunContext[UserProfile],
+        listing_id: str) -> list[str]:
+    
+    print(f"property_id: {listing_id}")
+    AVAILABLE_SLOTS = {
+        "CH1954": ["Wednesday at 3 PM", "Thursday at 10 AM"],
+        "CH1970": ["Friday at 2 PM", "Saturday at 11 AM"],
+        "CH1893": ["Monday at 5 PM", "Tuesday at 1 PM"],
+    }
+    return AVAILABLE_SLOTS.get(listing_id, ["No slots available"])
+
+
+@realtor_agent.tool
+async def schedule_appointment(
+        ctx: RunContext[UserProfile],
+        selected_date_time: str) -> list[str]:
+    
+    profile = ctx.deps
+    return f"Appointment confirmed for {selected_date_time}. A text confirmation has been sent to {profile.phone}."
+
 
 def profile_to_text(profile: UserProfile) -> str:
     return (
