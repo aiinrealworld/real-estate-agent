@@ -1,6 +1,6 @@
 import asyncio
 from agent import realtor_agent
-from models import UserProfile
+from models.user_profile import UserProfile
 from dotenv import load_dotenv
 import logfire
 from typing import List

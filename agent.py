@@ -2,7 +2,8 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 import openai
-from models import UserProfile, validate_user_profile, normalize_user_profile, apply_defaults_to_profile
+from models.user_profile import UserProfile, validate_user_profile, normalize_user_profile, apply_defaults_to_profile
+from models.property_recommendation import PropertyRecommendation, parse_chroma_results, format_recommendations_for_llm
 import chromadb
 
 from dotenv import load_dotenv
@@ -107,7 +108,11 @@ async def recommend_properties(
         }
 
     )
-    return results
+    print(f"recommended results {results}")
+    recommendations = parse_chroma_results(results)
+    llm_input = format_recommendations_for_llm(recommendations)
+
+    return llm_input
 
 def profile_to_text(profile: UserProfile) -> str:
     return (

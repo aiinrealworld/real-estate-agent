@@ -8,7 +8,7 @@ import uvicorn
 from pydantic_ai.messages import ModelMessage
 
 from agent import realtor_agent
-from models import UserProfile
+from models.user_profile import UserProfile
 import logfire
 
 logfire.configure(send_to_logfire='if-token-present')
