@@ -5,6 +5,8 @@ import openai
 from models.user_profile import UserProfile, validate_user_profile, normalize_user_profile, apply_defaults_to_profile
 from models.property_recommendation import PropertyRecommendation, parse_chroma_results
 import chromadb
+import re
+from dateparser import parse
 
 from dotenv import load_dotenv
 import os
@@ -109,22 +111,31 @@ async def recommend_properties(
 
     )
     recommendations = parse_chroma_results(results)
-    print(f"recommended results {recommendations}")
     return recommendations
 
 
 @realtor_agent.tool
 async def get_available_slots(
         ctx: RunContext[UserProfile],
-        listing_id: str) -> list[str]:
+        listing_id: str,
+        date_time_preference: Optional[str] = None) -> list[str]:
     
-    print(f"property_id: {listing_id}")
+    if date_time_preference:
+        date_time_preference_clean = re.sub(r'\b(next|this|coming)\b', '', date_time_preference, flags=re.IGNORECASE)
+        parsed_datetime = parse(date_time_preference, settings={"PREFER_DATES_FROM": "future"})
+        print(f"listing_id: {listing_id} @ preferred datetime '{date_time_preference_clean}' => {parsed_datetime}")
+    else:
+        print(f"listing_id: {listing_id} @ no datetime preference provided")
+
     AVAILABLE_SLOTS = {
         "CH1954": ["Wednesday at 3 PM", "Thursday at 10 AM"],
         "CH1970": ["Friday at 2 PM", "Saturday at 11 AM"],
         "CH1893": ["Monday at 5 PM", "Tuesday at 1 PM"],
     }
-    return AVAILABLE_SLOTS.get(listing_id, ["No slots available"])
+
+    available_slots_str = str(f"available slots for listing_id {listing_id}: {AVAILABLE_SLOTS.get(listing_id, ["No slots available"])}")
+    print(available_slots_str)
+    return available_slots_str
 
 
 @realtor_agent.tool
@@ -135,6 +146,16 @@ async def schedule_appointment(
     profile = ctx.deps
     return f"Appointment confirmed for {selected_date_time}. A text confirmation has been sent to {profile.phone}."
 
+#@realtor_agent.tool
+async def parse_date(
+    ctx: RunContext[UserProfile],
+    date_time_phrase: str
+    ) -> str:
+    """
+        Parses natural language time expressions like 'tomorrow morning' or 'next Friday at 3pm' into a datetime.
+    """
+    parsed_datetime = parse(date_time_phrase)
+    return parsed_datetime
 
 def profile_to_text(profile: UserProfile) -> str:
     return (
