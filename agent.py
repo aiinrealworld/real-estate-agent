@@ -3,7 +3,7 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 import openai
 from models.user_profile import UserProfile, validate_user_profile, normalize_user_profile, apply_defaults_to_profile
-from models.property_recommendation import parse_chroma_results
+from models.property_recommendation import PropertyRecommendation, parse_chroma_results
 import chromadb
 import re
 from dateparser import parse
@@ -146,10 +146,19 @@ async def get_agent_availability(
         )
         print(f"preferred datetime '{date_time_preference_clean}' => {parsed_datetime}")
 
+    # Apply buffer only if parsing succeeded
+    if parsed_datetime:
+        # Localize if needed
+        if parsed_datetime.tzinfo is None:
+            parsed_datetime = tz.localize(parsed_datetime)
+        
+        # Subtract 2 hours as scheduling buffer
+        parsed_datetime -= timedelta(hours=2)
     # Fallback to "tomorrow at 00:00" if parsing fails
-    if not parsed_datetime:
+    else:
         parsed_datetime = datetime.now(tz) + timedelta(days=1)
         parsed_datetime = parsed_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
+     
 
     # Localize if naive
     if parsed_datetime.tzinfo is None:
@@ -239,10 +248,74 @@ def format_slots_for_llm(slots: list[str], tz_str="America/Chicago") -> str:
 @realtor_agent.tool
 async def schedule_appointment(
         ctx: RunContext[UserProfile],
+        property: PropertyRecommendation,
         selected_date_time: str) -> list[str]:
     
-    profile = ctx.deps
-    return f"Appointment confirmed for {selected_date_time}. A text confirmation has been sent to {profile.phone}."
+    tz = pytz.timezone(AGENT_TIMEZONE)
+    now = datetime.now(tz)
+
+    # Try parsing human-friendly time
+    start_dt = parse(
+        selected_date_time,
+        settings={
+            "PREFER_DATES_FROM": "future",
+            "RELATIVE_BASE": now
+        }
+    )
+
+    if not start_dt:
+        return "Sorry, I couldn’t understand the selected time. Please try again."
+
+    # Localize if needed
+    if start_dt.tzinfo is None:
+        start_dt = tz.localize(start_dt)
+    
+    # Compute end time (1 hour after start)
+    end_dt = start_dt + timedelta(hours=1)
+
+    appt_response = send_appointment_to_n8n(ctx.deps, property, start_dt, end_dt)
+    return appt_response
+
+def send_appointment_to_n8n(
+        profile: UserProfile,
+        property: PropertyRecommendation,
+        start_dt: datetime,
+        end_dt: datetime
+        ) -> str:
+
+    # Construct event title and body
+    title = f"Showing for {profile.name} ({property.address}, {property.city})"
+    description = (
+        f"Thank you for scheduling the showing with us. Here are the details: \n\n"
+        f"Property ID: {property.listing_id}\n"
+        f"User: {profile.name}\n"
+        f"Phone: {profile.phone}\n"
+        f"Property: {property.address}, {property.city}, {property.state}, {property.zip_code}\n"
+        f"Appointment: {start_dt.strftime('%A, %B %d %Y at %I:%M %p')}"
+    )
+
+    payload = {
+        "mode": "schedule_appointment",
+        "listing_id": property.listing_id,
+        "start": start_dt.isoformat(),
+        "end": end_dt.isoformat(),
+        "title": title,
+        "description": description,
+        "user": {
+            "name": profile.name,
+            "phone": profile.phone
+        }
+    }
+
+    print(f"schedule appt payload: {payload}")
+    try:
+        response = requests.post(N8N_WEBHOOK_URL, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        return data.get("confirmation_message", "Your appointment has been scheduled.")
+    except Exception as e:
+        print(f"[schedule_appointment] Failed to call n8n: {e}")
+        return "There was an issue scheduling the appointment. Please try again later."
 
 def profile_to_text(profile: UserProfile) -> str:
     return (
