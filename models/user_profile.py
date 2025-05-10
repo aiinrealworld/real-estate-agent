@@ -78,7 +78,7 @@ def apply_defaults_to_profile(profile: UserProfile) -> UserProfile:
 def normalize_user_profile(profile: UserProfile) -> UserProfile:
     return UserProfile(
         name=profile.name,
-        phone=profile.phone,
+        phone=str(format_phone(profile.phone)),
         buyOrRent=profile.buyOrRent.strip().lower(),
         property_type=profile.property_type.strip(),
         sqft=str(normalize_sqft(profile.sqft)),
@@ -125,3 +125,21 @@ def normalize_bathrooms(input_str: str) -> float:
 
 def normalize_sqft(input_str: str) -> int:
     return int(normalize_number(input_str))
+
+# format phone number to e164 format
+def format_phone(phone: str, default_country_code: str = "+1") -> str:
+    if not phone:
+        return ""
+    
+    # Remove everything except digits
+    digits = re.sub(r"[^\d]", "", phone)
+
+    # Prepend country code if missing (assuming 10-digit US number)
+    if len(digits) == 10:
+        return default_country_code + digits
+    elif digits.startswith("1") and len(digits) == 11:
+        return "+" + digits
+    elif digits.startswith("+") and len(digits) > 1:
+        return digits
+    else:
+        return "+" + digits  # fallback for already full international

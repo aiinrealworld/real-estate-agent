@@ -67,6 +67,7 @@ async def recommend_properties(
 ) -> dict:
 
     profile = ctx.deps
+    print(f"user_profile in recommend_properties {profile}")
 
     setattr(profile, "name", name)
     setattr(profile, "phone", phone)
@@ -127,8 +128,12 @@ N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
 @realtor_agent.tool
 async def get_agent_availability(
     ctx: RunContext[UserProfile],
+    profile: UserProfile,
     date_time_preference: Optional[str] = None
 ) -> list[str]:
+
+    normalized_profile = normalize_user_profile(profile)
+    print(f"profile in get_agent_availability {normalize_user_profile}")
 
     tz = pytz.timezone(AGENT_TIMEZONE)
     parsed_datetime = None
@@ -248,9 +253,13 @@ def format_slots_for_llm(slots: list[str], tz_str="America/Chicago") -> str:
 @realtor_agent.tool
 async def schedule_appointment(
         ctx: RunContext[UserProfile],
+        profile: UserProfile,
         property: PropertyRecommendation,
         selected_date_time: str) -> list[str]:
-    
+
+    normalized_profile = normalize_user_profile(profile)
+    print(f"user_profile in schedule_appointment {normalized_profile}")
+
     tz = pytz.timezone(AGENT_TIMEZONE)
     now = datetime.now(tz)
 
@@ -264,7 +273,7 @@ async def schedule_appointment(
     )
 
     if not start_dt:
-        return "Sorry, I couldn’t understand the selected time. Please try again."
+        return "Sorry, I couldn't understand the selected time. Please try again."
 
     # Localize if needed
     if start_dt.tzinfo is None:
@@ -273,7 +282,7 @@ async def schedule_appointment(
     # Compute end time (1 hour after start)
     end_dt = start_dt + timedelta(hours=1)
 
-    appt_response = send_appointment_to_n8n(ctx.deps, property, start_dt, end_dt)
+    appt_response = send_appointment_to_n8n(normalized_profile, property, start_dt, end_dt)
     return appt_response
 
 def send_appointment_to_n8n(
