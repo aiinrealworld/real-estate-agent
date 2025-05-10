@@ -3,10 +3,14 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 import openai
 from models.user_profile import UserProfile, validate_user_profile, normalize_user_profile, apply_defaults_to_profile
-from models.property_recommendation import PropertyRecommendation, parse_chroma_results
+from models.property_recommendation import parse_chroma_results
 import chromadb
 import re
 from dateparser import parse
+from datetime import datetime, timedelta, time
+import requests
+import pytz
+import json
 
 from dotenv import load_dotenv
 import os
@@ -113,29 +117,123 @@ async def recommend_properties(
     recommendations = parse_chroma_results(results)
     return recommendations
 
+WORK_START = time(9, 0)
+WORK_END = time(18, 0)
+APPOINTMENT_DURATION = timedelta(hours=1)
+BUFFER = timedelta(minutes=30)
+AGENT_TIMEZONE = "America/Chicago"
+N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
 
 @realtor_agent.tool
-async def get_available_slots(
-        ctx: RunContext[UserProfile],
-        listing_id: str,
-        date_time_preference: Optional[str] = None) -> list[str]:
-    
+async def get_agent_availability(
+    ctx: RunContext[UserProfile],
+    date_time_preference: Optional[str] = None
+) -> list[str]:
+
+    tz = pytz.timezone(AGENT_TIMEZONE)
+    parsed_datetime = None
+
     if date_time_preference:
         date_time_preference_clean = re.sub(r'\b(next|this|coming)\b', '', date_time_preference, flags=re.IGNORECASE)
-        parsed_datetime = parse(date_time_preference, settings={"PREFER_DATES_FROM": "future"})
-        print(f"listing_id: {listing_id} @ preferred datetime '{date_time_preference_clean}' => {parsed_datetime}")
-    else:
-        print(f"listing_id: {listing_id} @ no datetime preference provided")
+        now = datetime.now(tz)
+        print(f"now is set to {now}")
+        parsed_datetime = parse(
+            date_time_preference_clean, 
+            settings={
+                "PREFER_DATES_FROM": "future",
+                "RELATIVE_BASE": now
+            }
+        )
+        print(f"preferred datetime '{date_time_preference_clean}' => {parsed_datetime}")
 
-    AVAILABLE_SLOTS = {
-        "CH1954": ["Wednesday at 3 PM", "Thursday at 10 AM"],
-        "CH1970": ["Friday at 2 PM", "Saturday at 11 AM"],
-        "CH1893": ["Monday at 5 PM", "Tuesday at 1 PM"],
+    # Fallback to "tomorrow at 00:00" if parsing fails
+    if not parsed_datetime:
+        parsed_datetime = datetime.now(tz) + timedelta(days=1)
+        parsed_datetime = parsed_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Localize if naive
+    if parsed_datetime.tzinfo is None:
+        parsed_datetime = tz.localize(parsed_datetime)
+
+    # Now compute free slots based on parsed datetime
+    available_slots = compute_available_slots(parsed_datetime, AGENT_TIMEZONE)
+    available_slots_formatted = format_slots_for_llm(available_slots, AGENT_TIMEZONE)
+    print(f"formatted available slots for LLM {available_slots_formatted}")
+    
+    return available_slots_formatted
+
+def compute_available_slots(
+    parsed_datetime: datetime,
+    timezone_str: str = "America/Chicago"
+) -> list[str]:
+    
+    tz = pytz.timezone(timezone_str)
+    date = parsed_datetime.astimezone(tz).date()  # just the date portion
+    busy_slots = fetch_busy_slots_from_n8n(parsed_datetime)
+
+    available_slots = []
+    start_dt = tz.localize(datetime.combine(date, WORK_START))
+    end_dt = tz.localize(datetime.combine(date, WORK_END)) - APPOINTMENT_DURATION
+
+    current = start_dt
+    while current <= end_dt:
+        proposed_end = current + APPOINTMENT_DURATION
+        conflict = any(
+            (current < busy_end + BUFFER and proposed_end > busy_start - BUFFER)
+            for busy_start, busy_end in busy_slots
+        )
+        if not conflict:
+            available_slots.append(current.isoformat())
+        current += timedelta(minutes=30)
+
+    print(f"agents available slots {available_slots}")
+    return available_slots
+
+def fetch_busy_slots_from_n8n(start_datetime: datetime) -> list[tuple[datetime, datetime]]:
+    end_datetime = start_datetime + timedelta(days=1)
+
+    payload = {
+        "mode": "get_busy_slots",
+        "start": start_datetime.isoformat(),
+        "end": end_datetime.isoformat()
     }
 
-    available_slots_str = str(f"available slots for listing_id {listing_id}: {AVAILABLE_SLOTS.get(listing_id, ["No slots available"])}")
-    print(available_slots_str)
-    return available_slots_str
+    response = requests.post(N8N_WEBHOOK_URL, json=payload)
+    response.raise_for_status()
+    data = response.json()
+
+    calendars = data.get("calendars", {})
+    busy_slots = []
+    for calendar_id, calendar_data in calendars.items():
+        for item in calendar_data.get("busy", []):
+            start = datetime.fromisoformat(item["start"])
+            end = datetime.fromisoformat(item["end"])
+            busy_slots.append((start, end))
+
+    print(f"agent's schedule {busy_slots}")
+    return busy_slots
+
+def format_slots_for_llm(slots: list[str], tz_str="America/Chicago") -> str:
+    tz = pytz.timezone(tz_str)
+
+    # Current time in agent's timezone
+    now = datetime.now(tz)
+    current_time = now.strftime("%A, %B %d at %I:%M %p %Z")
+
+    # Format each available slot
+    formatted_slots = []
+    for iso in slots:
+        dt = datetime.fromisoformat(iso).astimezone(tz)
+        formatted_time = dt.strftime("%A, %B %d at %I:%M %p").lstrip("0")
+        formatted_slots.append(formatted_time)
+
+    # Combine into a dictionary and return as JSON string
+    output = {
+        "current_time": current_time,
+        "available_slots": formatted_slots
+    }
+
+    return json.dumps(output, indent=2)
 
 
 @realtor_agent.tool
@@ -145,17 +243,6 @@ async def schedule_appointment(
     
     profile = ctx.deps
     return f"Appointment confirmed for {selected_date_time}. A text confirmation has been sent to {profile.phone}."
-
-#@realtor_agent.tool
-async def parse_date(
-    ctx: RunContext[UserProfile],
-    date_time_phrase: str
-    ) -> str:
-    """
-        Parses natural language time expressions like 'tomorrow morning' or 'next Friday at 3pm' into a datetime.
-    """
-    parsed_datetime = parse(date_time_phrase)
-    return parsed_datetime
 
 def profile_to_text(profile: UserProfile) -> str:
     return (
