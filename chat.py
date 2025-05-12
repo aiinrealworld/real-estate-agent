@@ -10,7 +10,7 @@ from typing import List
 from pydantic_ai.messages import ModelMessage
 
 # Local application imports
-from agent import realtor_agent
+from agent.realtor_agent import realtor_agent
 from agent_config import AgentDependencies
 from models.agent_schedule_config import AgentScheduleConfig
 
@@ -36,12 +36,16 @@ async def main():
     )
 
     print("Welcome to the Real Estate Agent Chat!")
-    message = ""
+    message = "Hello"
 
     message_history: List[ModelMessage] = []
 
     # Chat loop
     while True:
+
+        if message.lower() in ["exit", "quit"]:
+            print("Goodbye!")
+            break
 
         response = await agent.run(
             message, 

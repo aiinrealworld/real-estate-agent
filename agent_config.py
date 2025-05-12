@@ -35,6 +35,7 @@ Here is the list of user preferences you should collect:
 
 *   **If name is missing:** "May I know your name?"
 *   **If phone is missing:** "Okay, and what's a good phone number to reach you at so I can follow up?"
+        Always confirm the phone number.
 *   **If BuyOrRent is missing:** "Are you looking to buy or rent?"
 *   **If location is missing:** "Okay, great! And where are you hoping to find this property?"
 *   **If property_type is missing:** "Thanks! I'm curious, are you looking for a house, an apartment, or something else entirely?"

@@ -16,8 +16,8 @@ from pydantic_ai.messages import ModelMessage
 # Local application imports
 from agent_config import AgentDependencies
 from models.agent_schedule_config import AgentScheduleConfig
-from models.user_profile import UserProfile
-from agent import realtor_agent
+from agent.realtor_agent import realtor_agent
+
 
 logfire.configure(send_to_logfire='if-token-present')
 
@@ -25,6 +25,8 @@ load_dotenv()
 chroma_db_listings = os.getenv("CHROMA_DB_LISTINGS")
 n8n_webhook_url = os.getenv("N8N_WEBHOOK_URL")
 agent_timezone = os.getenv("AGENT_TIMEZONE")
+port = int(os.getenv("VAPI_EXPOSE_PORT", 8000))
+
 
 app = FastAPI()
 
@@ -120,4 +122,4 @@ async def vapi_webhook(req: VAPIRequest):
     )
 
 if __name__ == "__main__":
-    uvicorn.run("voice_webhook:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("voice_vapi:app", host="0.0.0.0", port=port, reload=True)
