@@ -1,0 +1,327 @@
+{
+  "name": "Real Estate Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "calendar",
+        "calendar": {
+          "__rl": true,
+          "value": "fa8182184d74b1b6bb1541e7bf90c3bd40fc24fa8c11490a0f8c452e8c63fc31@group.calendar.google.com",
+          "mode": "list",
+          "cachedResultName": "Real Estate Agent"
+        },
+        "timeMin": "={{ $json.body.start }}",
+        "timeMax": "={{ $json.body.end }}",
+        "options": {
+          "outputFormat": "raw"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.2,
+      "position": [
+        20,
+        -380
+      ],
+      "id": "06c1a23d-b440-4dd2-a5ab-dc2f38f32f95",
+      "name": "Google Calendar",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "qwCOnJppwziiuKSM",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "real-estate-agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        -260
+      ],
+      "id": "a80b1c3b-b6d7-40d2-82eb-5058cbbdfdda",
+      "name": "Webhook",
+      "webhookId": "95f50bbf-e9f2-42c7-affb-d030d5798c5f"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.mode }}",
+                    "rightValue": "get_busy_slots",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "get_busy_slots"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7e0ef752-27a7-40d3-be83-f7bd3571c5cd",
+                    "leftValue": "={{ $json.body.mode }}",
+                    "rightValue": "schedule_appointment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "schedule_appointment"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -280,
+        -260
+      ],
+      "id": "df8202c2-5bba-46f1-a89e-4c474608f05b",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        280,
+        -380
+      ],
+      "id": "327e57bb-925d-4406-937e-70726334688d",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "fa8182184d74b1b6bb1541e7bf90c3bd40fc24fa8c11490a0f8c452e8c63fc31@group.calendar.google.com",
+          "mode": "list",
+          "cachedResultName": "Real Estate Agent"
+        },
+        "start": "={{ $json.body.start }}",
+        "end": "={{ $json.body.end }}",
+        "additionalFields": {
+          "description": "={{ $json.body.description }}",
+          "summary": "={{ $json.body.title }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.2,
+      "position": [
+        20,
+        -140
+      ],
+      "id": "a8a1f124-9e48-4526-9368-32b363981866",
+      "name": "Google Calendar1",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "qwCOnJppwziiuKSM",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "whatsapp:+14155238886",
+        "to": "=whatsapp:{{ $('Webhook').item.json.body.user.phone }}",
+        "message": "={{ $('Webhook').item.json.body.description }}\n\nIf you like to make changes to the appointment, text directly to agent at +1 666-777-8888",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        600,
+        -240
+      ],
+      "id": "84de35b2-2b54-4b52-9f4d-2441037b4a10",
+      "name": "Twilio",
+      "credentials": {
+        "twilioApi": {
+          "id": "snCN4d9vQqRxoWzf",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5185489f-4bdf-466b-a9f2-f68be4d9116f",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "confirmed",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        280,
+        -140
+      ],
+      "id": "89d15c0b-b25c-4a64-b5d2-049dce21b189",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        -80
+      ],
+      "id": "914d3026-8a90-4e30-9837-08317d07df43",
+      "name": "Respond to Webhook1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Calendar": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Google Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Calendar1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Calendar1": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        []
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Twilio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Twilio": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f5ed7814-add2-4029-a5d6-abc648c027c2",
+  "meta": {
+    "instanceId": "7211d6b045193b5a4f92e62e503797fac7f537a07832f2d7a2ed2f0ac89a1ef3"
+  },
+  "id": "iFCB9aZI77g6IHmr",
+  "tags": []
+}
