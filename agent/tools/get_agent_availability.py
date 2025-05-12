@@ -50,8 +50,10 @@ async def get_agent_availability(
         if parsed_datetime.tzinfo is None:
             parsed_datetime = tz.localize(parsed_datetime)
 
-        # Subtract 2 hours as scheduling buffer
-        parsed_datetime -= timedelta(hours=2)
+        # Only subtract 2 hours (buffer between appointments) if time is not exactly midnight (to avoid going to next day)
+        if parsed_datetime.time() != datetime.min.time():
+            parsed_datetime -= timedelta(hours=2)
+            
     # Fallback to "tomorrow at 00:00" if parsing fails
     else:
         parsed_datetime = datetime.now(tz) + timedelta(days=1)
