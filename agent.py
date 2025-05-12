@@ -1,25 +1,38 @@
+# Standard library imports
+import os
+import re
+import json
+from datetime import datetime, timedelta
+
+# Third-party library imports
+from dotenv import load_dotenv
+import openai
+import requests
+import pytz
+from dateparser import parse
+from typing import Optional
+
+# Pydantic AI imports
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
-import openai
-from models.user_profile import UserProfile, validate_user_profile, normalize_user_profile, apply_defaults_to_profile
-from models.property_recommendation import PropertyRecommendation, parse_chroma_results
-import chromadb
-import re
-from dateparser import parse
-from datetime import datetime, timedelta, time
-import requests
-import pytz
-import json
 
-from dotenv import load_dotenv
-import os
-from typing import Optional, List
-from agent_config import SYSTEM_PROMPT
+# Local application imports
+from agent_config import SYSTEM_PROMPT, AgentDependencies
+from models.user_profile import (
+    UserProfile,
+    validate_user_profile,
+    normalize_user_profile,
+    apply_defaults_to_profile,
+)
+from models.property_recommendation import (
+    PropertyRecommendation,
+    parse_chroma_results,
+)
+from models.agent_schedule_config import AgentScheduleConfig
 
 
 load_dotenv()
-
 openrouter_api_key = os.getenv("OPENROUTER_KEY")
 llm_model = os.getenv("OPEN_ROUTER_LLM_MODEL")
 
@@ -39,50 +52,18 @@ realtor_agent = Agent(
     model = model,
     system_prompt = SYSTEM_PROMPT,
     temperature=0.3,
-    deps_type=UserProfile,
+    deps_type=AgentDependencies,
     output_type=str,
     instrument=True
 )
 
-from data.data_config import CHROMA_DB_LISTINGS
-
-# Setup Chroma
-client = chromadb.PersistentClient(path="chroma_db")
-collection = client.get_collection(CHROMA_DB_LISTINGS)
-
 @realtor_agent.tool
 async def recommend_properties(
-    ctx: RunContext[UserProfile],
-    name: Optional[str] = None,
-    phone: Optional[str] = None,
-    buyOrRent: Optional[str] = None,
-    location: Optional[str] = None,
-    property_type: Optional[str] = None,
-    sqft: Optional[str] = None,
-    budget: Optional[str] = None,
-    bedrooms: Optional[int] = None,
-    bathrooms: Optional[int] = None,
-    must_haves: Optional[List[str]] = None,
-    good_to_haves: Optional[List[str]] = None
+    ctx: RunContext[AgentDependencies],
+    profile: UserProfile
 ) -> dict:
 
-    profile = ctx.deps
     print(f"user_profile in recommend_properties {profile}")
-
-    setattr(profile, "name", name)
-    setattr(profile, "phone", phone)
-    setattr(profile, "buyOrRent", buyOrRent)
-    setattr(profile, "location", location)
-    setattr(profile, "property_type", property_type)
-    setattr(profile, "sqft", sqft)
-    setattr(profile, "budget", budget)
-    setattr(profile, "bedrooms", bedrooms)
-    setattr(profile, "bathrooms", bathrooms)
-
-    if must_haves:
-        profile.must_haves.extend(must_haves)
-    if good_to_haves:
-        profile.good_to_haves.extend(good_to_haves)
 
     validation_errors = validate_user_profile(profile)
     if validation_errors:
@@ -98,8 +79,12 @@ async def recommend_properties(
     price_tolerance = 50000
     sqft_tolerance = 300
 
+    chroma_client = ctx.deps.chroma_client
+    chroma_db_listings = ctx.deps.chroma_db_listings
+
+    listing_collection = chroma_client.get_collection(chroma_db_listings)
     # Query Chroma
-    results = collection.query(
+    results = listing_collection.query(
         query_embeddings=[query_embedding],
         n_results=3,
         where = {
@@ -118,24 +103,20 @@ async def recommend_properties(
     recommendations = parse_chroma_results(results)
     return recommendations
 
-WORK_START = time(9, 0)
-WORK_END = time(18, 0)
-APPOINTMENT_DURATION = timedelta(hours=1)
-BUFFER = timedelta(minutes=30)
-AGENT_TIMEZONE = "America/Chicago"
-N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
-
 @realtor_agent.tool
 async def get_agent_availability(
-    ctx: RunContext[UserProfile],
+    ctx: RunContext[AgentDependencies],
     profile: UserProfile,
     date_time_preference: Optional[str] = None
 ) -> list[str]:
 
-    normalized_profile = normalize_user_profile(profile)
-    print(f"profile in get_agent_availability {normalize_user_profile}")
+    normalized_user_profile = normalize_user_profile(profile)
+    print(f"profile in get_agent_availability {normalized_user_profile}")
 
-    tz = pytz.timezone(AGENT_TIMEZONE)
+    agent_timezone = ctx.deps.agent_schedule_config.timezone
+    n8n_webhook_url = ctx.deps.n8n_webhook_url
+
+    tz = pytz.timezone(agent_timezone)
     parsed_datetime = None
 
     if date_time_preference:
@@ -169,31 +150,39 @@ async def get_agent_availability(
     if parsed_datetime.tzinfo is None:
         parsed_datetime = tz.localize(parsed_datetime)
 
+    agent_schedule_config = ctx.deps.agent_schedule_config
     # Now compute free slots based on parsed datetime
-    available_slots = compute_available_slots(parsed_datetime, AGENT_TIMEZONE)
-    available_slots_formatted = format_slots_for_llm(available_slots, AGENT_TIMEZONE)
+    available_slots = compute_available_slots(parsed_datetime, agent_schedule_config, n8n_webhook_url)
+    available_slots_formatted = format_slots_for_llm(available_slots, agent_timezone)
     print(f"formatted available slots for LLM {available_slots_formatted}")
     
     return available_slots_formatted
 
 def compute_available_slots(
     parsed_datetime: datetime,
-    timezone_str: str = "America/Chicago"
+    agent_schedule_config: AgentScheduleConfig,
+    n8n_webhook_url: str
 ) -> list[str]:
     
-    tz = pytz.timezone(timezone_str)
+    work_start = agent_schedule_config.work_start
+    work_end = agent_schedule_config.work_end
+    appointment_duration = agent_schedule_config.appointment_duration
+    schedule_buffer = agent_schedule_config.schedule_buffer
+    timezone = agent_schedule_config.timezone
+
+    tz = pytz.timezone(timezone)
     date = parsed_datetime.astimezone(tz).date()  # just the date portion
-    busy_slots = fetch_busy_slots_from_n8n(parsed_datetime)
+    busy_slots = fetch_busy_slots_from_n8n(parsed_datetime, n8n_webhook_url)
 
     available_slots = []
-    start_dt = tz.localize(datetime.combine(date, WORK_START))
-    end_dt = tz.localize(datetime.combine(date, WORK_END)) - APPOINTMENT_DURATION
+    start_dt = tz.localize(datetime.combine(date, work_start))
+    end_dt = tz.localize(datetime.combine(date, work_end)) - appointment_duration
 
     current = start_dt
     while current <= end_dt:
-        proposed_end = current + APPOINTMENT_DURATION
+        proposed_end = current + appointment_duration
         conflict = any(
-            (current < busy_end + BUFFER and proposed_end > busy_start - BUFFER)
+            (current < busy_end + schedule_buffer and proposed_end > busy_start - schedule_buffer)
             for busy_start, busy_end in busy_slots
         )
         if not conflict:
@@ -203,7 +192,9 @@ def compute_available_slots(
     print(f"agents available slots {available_slots}")
     return available_slots
 
-def fetch_busy_slots_from_n8n(start_datetime: datetime) -> list[tuple[datetime, datetime]]:
+def fetch_busy_slots_from_n8n(
+        start_datetime: datetime,
+        n8n_webhook_url: str) -> list[tuple[datetime, datetime]]:
     end_datetime = start_datetime + timedelta(days=1)
 
     payload = {
@@ -212,7 +203,7 @@ def fetch_busy_slots_from_n8n(start_datetime: datetime) -> list[tuple[datetime, 
         "end": end_datetime.isoformat()
     }
 
-    response = requests.post(N8N_WEBHOOK_URL, json=payload)
+    response = requests.post(n8n_webhook_url, json=payload)
     response.raise_for_status()
     data = response.json()
 
@@ -252,7 +243,7 @@ def format_slots_for_llm(slots: list[str], tz_str="America/Chicago") -> str:
 
 @realtor_agent.tool
 async def schedule_appointment(
-        ctx: RunContext[UserProfile],
+        ctx: RunContext[AgentDependencies],
         profile: UserProfile,
         property: PropertyRecommendation,
         selected_date_time: str) -> list[str]:
@@ -260,7 +251,8 @@ async def schedule_appointment(
     normalized_profile = normalize_user_profile(profile)
     print(f"user_profile in schedule_appointment {normalized_profile}")
 
-    tz = pytz.timezone(AGENT_TIMEZONE)
+    agent_timezone = ctx.deps.agent_schedule_config.timezone
+    tz = pytz.timezone(agent_timezone)
     now = datetime.now(tz)
 
     # Try parsing human-friendly time
@@ -282,14 +274,16 @@ async def schedule_appointment(
     # Compute end time (1 hour after start)
     end_dt = start_dt + timedelta(hours=1)
 
-    appt_response = send_appointment_to_n8n(normalized_profile, property, start_dt, end_dt)
+    n8n_webhook_url = ctx.deps.n8n_webhook_url
+    appt_response = send_appointment_to_n8n(normalized_profile, property, start_dt, end_dt, n8n_webhook_url)
     return appt_response
 
 def send_appointment_to_n8n(
         profile: UserProfile,
         property: PropertyRecommendation,
         start_dt: datetime,
-        end_dt: datetime
+        end_dt: datetime,
+        n8n_webhook_url: str
         ) -> str:
 
     # Construct event title and body
@@ -318,7 +312,7 @@ def send_appointment_to_n8n(
 
     print(f"schedule appt payload: {payload}")
     try:
-        response = requests.post(N8N_WEBHOOK_URL, json=payload)
+        response = requests.post(n8n_webhook_url, json=payload)
         response.raise_for_status()
         data = response.json()
         return data.get("confirmation_message", "Your appointment has been scheduled.")

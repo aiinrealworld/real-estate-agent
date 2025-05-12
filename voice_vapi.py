@@ -1,17 +1,30 @@
+# Standard library imports
+import os
+import json
+
+# Third-party library imports
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-import json
 from pydantic import BaseModel
-from typing import Dict
-from typing import List
+from typing import Dict, List
 import uvicorn
+import chromadb
+import logfire
 from pydantic_ai.messages import ModelMessage
 
-from agent import realtor_agent
+# Local application imports
+from agent_config import AgentDependencies
+from models.agent_schedule_config import AgentScheduleConfig
 from models.user_profile import UserProfile
-import logfire
+from agent import realtor_agent
 
 logfire.configure(send_to_logfire='if-token-present')
+
+load_dotenv()
+chroma_db_listings = os.getenv("CHROMA_DB_LISTINGS")
+n8n_webhook_url = os.getenv("N8N_WEBHOOK_URL")
+agent_timezone = os.getenv("AGENT_TIMEZONE")
 
 app = FastAPI()
 
@@ -36,6 +49,17 @@ class VAPIRequest(BaseModel):
     timestamp: int
     stream: bool
 
+agent_schedule_config = AgentScheduleConfig(
+                                timezone=agent_timezone
+                        )
+
+agent_dependencies = AgentDependencies(
+    chroma_client=chromadb.PersistentClient(path="chroma_db"),
+    chroma_db_listings=chroma_db_listings,
+    n8n_webhook_url=n8n_webhook_url,
+    agent_schedule_config=agent_schedule_config
+    )
+
 @app.post("/vapi-webhook/chat/completions")
 async def vapi_webhook(req: VAPIRequest):
     
@@ -48,19 +72,19 @@ async def vapi_webhook(req: VAPIRequest):
     if session_id not in session_store:
         session_store[session_id] = {
             "agent": realtor_agent,
-            "profile": UserProfile(),
+            "agent_dependencies": agent_dependencies,
             "message_history": message_history
         }
 
     session = session_store[session_id]
     agent = session["agent"]
-    user_profile = session["profile"]
+    deps = session["agent_dependencies"]
     message_history = session["message_history"]
 
     # Run agent (non-streaming)
     response = await agent.run(
         user_message,
-        deps=user_profile,
+        deps=deps,
         message_history=message_history
     )
 

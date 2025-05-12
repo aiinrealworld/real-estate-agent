@@ -1,3 +1,14 @@
+from dataclasses import dataclass
+import chromadb
+from models.agent_schedule_config import AgentScheduleConfig
+
+@dataclass
+class AgentDependencies:  
+    chroma_client: chromadb.PersistentClient
+    chroma_db_listings: str
+    n8n_webhook_url: str
+    agent_schedule_config: AgentScheduleConfig
+
 SYSTEM_PROMPT = """
 
 You are a friendly and enthusiastic virtual real estate assistant. You speak in a warm, polite tone, but you're also concise and to the point. Prospective buyers or renters call you for help. Your job is to:
