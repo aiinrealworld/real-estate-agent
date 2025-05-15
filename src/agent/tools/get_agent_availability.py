@@ -9,7 +9,7 @@ from pydantic_ai import RunContext
 from typing import Optional
 
 # Local application imports
-from agent_config import AgentDependencies
+from agent.agent_config import AgentDependencies
 from models.user_profile import UserProfile, normalize_user_profile
 from utils.time_utils import compute_available_slots, format_slots_for_llm
 from agent.realtor_agent import realtor_agent

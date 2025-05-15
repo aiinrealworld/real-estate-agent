@@ -2,7 +2,7 @@
 from pydantic_ai import RunContext
 
 # Local application imports
-from agent_config import AgentDependencies
+from agent.agent_config import AgentDependencies
 from utils.embedding_utils import get_embedding, profile_to_text
 from agent.realtor_agent import realtor_agent
 from models.property_recommendation import parse_chroma_results

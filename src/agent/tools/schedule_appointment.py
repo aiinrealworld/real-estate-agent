@@ -8,7 +8,7 @@ from pydantic_ai import RunContext
 
 # Local application imports
 from utils.appointment_utils import send_appointment_to_n8n
-from agent_config import AgentDependencies
+from agent.agent_config import AgentDependencies
 from agent.realtor_agent import realtor_agent
 from models.property_recommendation import PropertyRecommendation
 from models.user_profile import UserProfile, normalize_user_profile

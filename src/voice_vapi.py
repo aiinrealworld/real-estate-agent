@@ -14,7 +14,7 @@ import logfire
 from pydantic_ai.messages import ModelMessage
 
 # Local application imports
-from agent_config import AgentDependencies
+from agent.agent_config import AgentDependencies
 from models.agent_schedule_config import AgentScheduleConfig
 from agent.realtor_agent import realtor_agent
 
