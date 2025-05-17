@@ -10,7 +10,7 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 # Local application imports
-from agent_config import SYSTEM_PROMPT, AgentDependencies
+from agent.agent_config import SYSTEM_PROMPT, AgentDependencies
 
 load_dotenv()
 openrouter_api_key = os.getenv("OPENROUTER_KEY")

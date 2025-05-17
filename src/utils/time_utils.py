@@ -4,10 +4,10 @@ import json
 
 # Third-party library imports
 import pytz
-import requests
 
 # Local application imports
 from models.agent_schedule_config import AgentScheduleConfig
+from utils.appointment_utils import fetch_busy_slots_from_n8n
 
 
 def compute_available_slots(
@@ -43,33 +43,6 @@ def compute_available_slots(
 
     print(f"agents available slots {available_slots}")
     return available_slots
-
-
-def fetch_busy_slots_from_n8n(
-        start_datetime: datetime,
-        n8n_webhook_url: str) -> list[tuple[datetime, datetime]]:
-    end_datetime = start_datetime + timedelta(days=1)
-
-    payload = {
-        "mode": "get_busy_slots",
-        "start": start_datetime.isoformat(),
-        "end": end_datetime.isoformat()
-    }
-
-    response = requests.post(n8n_webhook_url, json=payload)
-    response.raise_for_status()
-    data = response.json()
-
-    calendars = data.get("calendars", {})
-    busy_slots = []
-    for calendar_id, calendar_data in calendars.items():
-        for item in calendar_data.get("busy", []):
-            start = datetime.fromisoformat(item["start"])
-            end = datetime.fromisoformat(item["end"])
-            busy_slots.append((start, end))
-
-    print(f"agent's schedule {busy_slots}")
-    return busy_slots
 
 
 def format_slots_for_llm(slots: list[str], tz_str="America/Chicago") -> str:
