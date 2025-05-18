@@ -158,8 +158,8 @@
     },
     {
       "parameters": {
-        "from": "whatsapp:+14155238886",
-        "to": "=whatsapp:{{ $('Webhook').item.json.body.user.phone }}",
+        "from": "+18336741202",
+        "to": "={{ $('Webhook').item.json.body.user.phone }}",
         "message": "={{ $('Webhook').item.json.body.description }}\n\nIf you like to make changes to the appointment, text directly to agent at +1 666-777-8888",
         "options": {}
       },
@@ -318,7 +318,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "f5ed7814-add2-4029-a5d6-abc648c027c2",
+  "versionId": "a34c5d91-836b-4d83-b869-3fad9b1d0836",
   "meta": {
     "instanceId": "7211d6b045193b5a4f92e62e503797fac7f537a07832f2d7a2ed2f0ac89a1ef3"
   },
