@@ -19,7 +19,7 @@ This project is an AI-powered **Real Estate Agent** capable of handling buyer in
 ## 🗂️ Project Structure
 
 ```
-real_estate_agent/
+real_estate_agent/src
 ├── agent/
 │   ├── realtor_agent.py                 # Pydantic AI agent definition
 │   └── tools/                           # Agent tools (LLM-callable functions)
@@ -67,24 +67,28 @@ source venv/bin/activate  # or .\venv\Scripts\activate on Windows
 pip install -r requirements.txt
 ```
 
+### ⚠️ Note: ChromaDB Installation Error: Microsoft Visual C++ 14.0 or greater is required
+
+If you encounter the following error during ChromaDB installation:
+
+```bash
+error: Microsoft Visual C++ 14.0 or greater is required
+```
+
+You can fix this by installing the **Visual C++ Build Tools** from the official Microsoft website:
+
+👉 [Download Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+
 ### 4. Set environment variables
 
-Create a `.env` file in the root with the following:
-
-```env
-OPENAI_API_KEY=your-openai-key
-OPEN_ROUTER_LLM_MODEL=gpt-3.5-turbo  # or your chosen model
-CHROMA_DB_LISTINGS=real_estate_listings
-N8N_WEBHOOK_URL=https://your-n8n-instance/webhook/calendar
-AGENT_TIMEZONE=America/Chicago
-```
+Create a `.env` file in the root by copying `.env.example` and provide your keys.
 
 ---
 
 ## 💬 Run Chat (Text Interface)
 
 ```bash
-python chat.py
+python .\src\chat.py
 ```
 
 This launches a terminal-based chatbot you can interact with using natural language.
@@ -94,7 +98,7 @@ This launches a terminal-based chatbot you can interact with using natural langu
 ## 📞 Run Voice Agent (VAPI Webhook)
 
 ```bash
-python voice_vapi.py
+python .\src\voice_vapi.py
 ```
 
 - Exposes a FastAPI webhook on `http://localhost:8000/vapi-webhook/chat/completions`
