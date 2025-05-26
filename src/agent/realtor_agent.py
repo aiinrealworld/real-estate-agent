@@ -16,13 +16,13 @@ load_dotenv()
 openrouter_api_key = os.getenv("OPENROUTER_KEY")
 llm_model = os.getenv("OPEN_ROUTER_LLM_MODEL")
 
-model = OpenAIModel(
-    llm_model,
-    provider=OpenAIProvider(
-        base_url='https://openrouter.ai/api/v1',
-        api_key=openrouter_api_key
-    )
-)
+# model = OpenAIModel(
+#     llm_model,
+#     provider=OpenAIProvider(
+#         base_url='https://openrouter.ai/api/v1',
+#         api_key=openrouter_api_key
+#     )
+# )
 
 # Overriding to use OpenAI directly
 model = os.getenv("OPENAI_LLM_MODEL")
