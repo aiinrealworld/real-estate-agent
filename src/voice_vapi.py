@@ -12,11 +12,13 @@ import uvicorn
 import chromadb
 import logfire
 from pydantic_ai.messages import ModelMessage
+from pydantic_ai.usage import Usage
 
 # Local application imports
 from agent.agent_config import AgentDependencies
 from models.agent_schedule_config import AgentScheduleConfig
 from agent.realtor_agent import realtor_agent
+from agent.agent_cost import compute_cost
 
 
 logfire.configure(send_to_logfire='if-token-present')
@@ -74,12 +76,14 @@ async def vapi_webhook(req: VAPIRequest):
     if session_id not in session_store:
         session_store[session_id] = {
             "agent": realtor_agent,
+            "usage": Usage(),
             "agent_dependencies": agent_dependencies,
             "message_history": message_history
         }
 
     session = session_store[session_id]
     agent = session["agent"]
+    usage = session["usage"]
     deps = session["agent_dependencies"]
     message_history = session["message_history"]
 
@@ -87,11 +91,17 @@ async def vapi_webhook(req: VAPIRequest):
     response = await agent.run(
         user_message,
         deps=deps,
-        message_history=message_history
+        message_history=message_history,
+        usage=usage
     )
 
     print(f"Caller [{session_id}]: {user_message}")
     print(f"Agent [{session_id}]: {response.output}")
+
+    prompt_cost, completion_cost, total_cost = await compute_cost(usage=usage)
+    print(f"prompt_cost: {prompt_cost}, completion_cost: {completion_cost}, total_cost: {total_cost}")
+    print(f"request_tokens: {usage.request_tokens}, response_tokens: {usage.response_tokens}, total_tokens: {usage.total_tokens}, requests: {usage.requests}")
+
     session["message_history"] = response.all_messages()
 
     final_response = {
