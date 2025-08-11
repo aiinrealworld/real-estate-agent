@@ -5,3 +5,4 @@ chromadb==0.5.20
 dateparser==1.2.1
 tokonomics==0.3.14
 
+pywin32==311 ; sys_platform == "win32"
