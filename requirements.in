@@ -1,0 +1,7 @@
+pydantic-ai==0.1.8
+openai==1.83.0
+logfire==3.14.1
+chromadb==0.5.20
+dateparser==1.2.1
+tokonomics==0.3.14
+
