@@ -30,10 +30,18 @@ agent_timezone = os.getenv("AGENT_TIMEZONE")
 port = int(os.getenv("VAPI_EXPOSE_PORT", 8000))
 
 
-app = FastAPI()
+app = FastAPI(title="Real Estate Agent API", description="AI-powered real estate agent for property recommendations and scheduling")
 
 # Session store for multiple callers
 session_store: Dict[str, Dict] = {}
+
+@app.get("/")
+async def root():
+    return {"message": "Real Estate Agent API is running", "status": "healthy"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "real-estate-agent"}
 
 class Call(BaseModel):
     id: str
@@ -132,4 +140,4 @@ async def vapi_webhook(req: VAPIRequest):
     )
 
 if __name__ == "__main__":
-    uvicorn.run("voice_vapi:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("voice_vapi:app", host="0.0.0.0", port=port, reload=False)
